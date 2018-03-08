@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/CodeGenerator.iml" filepath="$PROJECT_DIR$/CodeGenerator.iml" />
+      <module fileurl="file://$PROJECT_DIR$/BLSTM.iml" filepath="$PROJECT_DIR$/BLSTM.iml" />
     </modules>
   </component>
 </project>
