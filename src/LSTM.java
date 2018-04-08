@@ -1,4 +1,11 @@
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Created by Administrator on 2018/2/26.
@@ -9,9 +16,12 @@ public class LSTM {
     private double[] tempcW , tempcU , tempcB ;
     private double[] outputW , outputU , outputB ;
     private double[] V , C ;
-    private double step = 10.0, stepInScore = 0.1;
+    private double step = 0.005, stepInScore = 0.0005;
+    private double[][] realS;
 
-    private double[] W = Tool.getSpecialArray(768,1.0/768);
+    private MLP mlp = new MLP(new int[]{768,300,50,1},0.008);
+
+    private double[] W = Tool.getSpecialArray(768,1.0/76);
 
     private double[][] score;
 
@@ -45,18 +55,30 @@ public class LSTM {
         outputB = Tool.getOneArray(lengthForEachInput);
     }
 
+    public void changeSize(int inputSize, int outputSize){
+        this.inputSize = inputSize;
+        this.outputSize = outputSize;
+        network = new ArrayList<>();
+        for (int i=0;i<inputSize;i++){
+            LSTMCell lstmCell = new LSTMCell(lengthForEachInput);
+            network.add(lstmCell);
+        }
+    }
+
     public void train(ArrayList<ArrayList> data){
         forward(data);
         backPropagation(data);
     }
 
     public void trainForNLP(ArrayList<ArrayList> data, double[][] realScore){
+        realS = realScore;
         forward(data);
         calculateError(data, realScore);
         backPropagation(data);
     }
 
     public void getResultForNLP(ArrayList<ArrayList> data){
+
         forward(data);
         ArrayList<ArrayList> out = new ArrayList<>();
         for (int i=inputSize-outputSize;i<inputSize;i++){
@@ -68,16 +90,21 @@ public class LSTM {
         }
 
         score = new double[inputSize][inputSize];
+        Pair[] pairs = new Pair[inputSize*inputSize];
+
+        int pos=0;
         for (int i=0;i<inputSize;i++){
             for (int j=0;j<inputSize;j++){
-                if (i == j){
-                    score[i][j] = 0;
-                }else{
-                    score[i][j] = getScore(out, i, j);
-                }
+                score[i][j] = getScoreWithoutTrain(out, i, j);
                 System.out.print(score[i][j]+"\t");
+                Pair pair = new Pair(i,j,score[i][j]);
+                pairs[pos++] = pair;
             }
             System.out.println();
+        }
+        Arrays.sort(pairs);
+        for (Pair p:pairs){
+            System.out.println(p);
         }
     }
 
@@ -96,49 +123,74 @@ public class LSTM {
         lossForAll = 0;
         for (int i=0;i<inputSize;i++){
             for (int j=0;j<inputSize;j++){
-                if (i == j){
-                    score[i][j] = 0;
-                }else{
-                    score[i][j] = getScore(out, i, j);
-                    double loss = score[i][j]-realScore[i][j];
-                    lossForAll += Math.abs(loss);
-                    updateW(out, loss, i, j);
-                    updateOut(out, loss, i, j);
-                }
+                score[i][j] = getScore(out, i, j);
+                double loss = score[i][j]-realScore[i][j];
+                lossForAll += Math.abs(loss);
+//                updateW(out, loss, i, j, realScore[i][j]);
+                updateOut(out, loss, i, j, realScore[i][j]);
             }
         }
+//        System.out.println("Score Loss: "+lossForAll);
+        lossForAll /=inputSize*inputSize;
         for (ArrayList list:out){
             data.add(list);
         }
     }
 
-    private void updateOut(ArrayList<ArrayList> out, double loss, int i, int j) {
+    private void updateOut(ArrayList<ArrayList> out, double loss, int i, int j, double s) {
+        double step = 0.0001;
+        MLPLayer layer = mlp.getLayers().get(0);
         for (int k=0;k<768;k++){
             if (k<384)
-                out.get(i).set(k, (double)out.get(i).get(k)+stepInScore*loss*W[k]);
+                out.get(i).set(k, (double)out.get(i).get(k)-step*layer.getGrad()[k]);
             else
-                out.get(j).set(k-384, (double)out.get(j).get(k-384)+stepInScore*loss*W[k]);
+                out.get(j).set(k-384, (double)out.get(j).get(k-384)-step*layer.getGrad()[k]);
         }
     }
 
-    private void updateW(ArrayList<ArrayList> out, double loss, int i, int j) {
+    private void updateW(ArrayList<ArrayList> out, double loss, int i, int j, double s) {
         for (int k=0;k<768;k++){
             if (k<384)
-                W[k] -= stepInScore*loss*(double)out.get(i).get(k);
+                W[k] -= stepInScore*loss*(double)out.get(i).get(k)*(loss+s)*(1-loss-s);
             else
-                W[k] -= stepInScore*loss*(double)out.get(j).get(k-384);
+                W[k] -= stepInScore*loss*(double)out.get(j).get(k-384)*(loss+s)*(1-loss-s);
         }
+    }
+
+    private double getScoreWithoutTrain(ArrayList<ArrayList> out, int i, int j) {
+
+        ArrayList<Double> input = new ArrayList<>();
+        for (int k=0;k<768;k++){
+            if (k<384)
+                input.add((double)out.get(i).get(k));
+            else
+                input.add((double)out.get(j).get(k-384));
+        }
+        return mlp.getResult(input).get(0);
     }
 
     private double getScore(ArrayList<ArrayList> out, int i, int j) {
-        double result = 0;
+
+//        double result = 0;
+//        for (int k=0;k<768;k++){
+//            if (k<384)
+//                result += W[k]*(double)out.get(i).get(k);
+//            else
+//                result += W[k]*(double)out.get(j).get(k-384);
+//        }
+//
+//        return 1.0/(1+Math.exp(-1*result));
+        ArrayList<Double> input = new ArrayList<>();
         for (int k=0;k<768;k++){
             if (k<384)
-                result += W[k]*(double)out.get(i).get(k);
+                input.add((double)out.get(i).get(k));
             else
-                result += W[k]*(double)out.get(j).get(k-384);
+                input.add((double)out.get(j).get(k-384));
         }
-        return 1.0/(1+Math.exp(-1*result));
+        ArrayList<Double> o = new ArrayList<>();
+        o.add(realS[i][j]);
+        mlp.train(input,o);
+        return mlp.getResult(input).get(0);
     }
 
     public void getResult(ArrayList<ArrayList> data){
@@ -238,7 +290,7 @@ public class LSTM {
             pos--;
         }
         loss = loss/2.0;
-        //System.out.println("LSTM Loss is "+loss);
+//        System.out.println("LSTM Loss is "+loss);
     }
 
     private void forward(ArrayList<ArrayList> data) {

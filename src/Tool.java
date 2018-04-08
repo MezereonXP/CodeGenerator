@@ -4,9 +4,23 @@ import java.util.ArrayList;
  * Created by Administrator on 2018/2/27.
  */
 public class Tool {
+
+    public static double tanh(double x){
+        return Math.tanh(x);
+    }
+
+    public static double tanhD(double x){
+        return 1-Math.tanh(x)*Math.tanh(x);
+    }
+
+    public static double sigmoidD(double x){
+        return x*(1-x);
+    }
+
     public static double sigmoid(double x){
         return 1.0/(1+Math.exp(-1*x));
     }
+
     public static ArrayList getEmptyArray(int length){
         ArrayList<Double> list = new ArrayList<>();
         for (int i=0;i<length;i++){
@@ -26,8 +40,17 @@ public class Tool {
     public static double[] getOneArray(int length){
         double[] a = new double[length];
         for (int i=0;i<length;i++){
-            a[i] = 1.0;
+            a[i] = Math.random();
         }
+        return a;
+    }
+
+    public static double[][] getOneMatrix(int length, int width){
+        double[][] a = new double[length][width];
+        for (int j=0;j<width;j++)
+            for (int i=0;i<length;i++){
+                a[i][j] = Math.random();
+            }
         return a;
     }
 
@@ -48,4 +71,6 @@ public class Tool {
         }
         return matrix;
     }
+
+
 }
